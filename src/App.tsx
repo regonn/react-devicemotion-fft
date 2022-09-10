@@ -2,12 +2,15 @@ import React from "react";
 import "./App.css";
 import { useState, useEffect } from "react";
 import { RawChart, RawData } from "./components/RawChart";
+import { ScoreChart, ScoreData } from "./components/ScoreChart";
 import { FttChart, FttData } from "./components/FttChart";
 import { fft } from "ezfft";
 
 interface DeviceOrientationEventiOS extends DeviceOrientationEvent {
   requestPermission?: () => Promise<"granted" | "denied">;
 }
+
+const range = 200
 
 function App() {
   const [data, setData] = useState<RawData>({
@@ -20,6 +23,9 @@ function App() {
   const [fttData, setFttData] = useState<FttData>({
     frequency: [],
     amplitude: [],
+  });
+  const [scoreData, setScoreData] = useState<ScoreData>({
+    scores: [],
   });
 
   const handleMotionEvent = (event: DeviceMotionEvent) => {
@@ -34,7 +40,7 @@ function App() {
     const interval: number = event.interval ?? 0;
 
     setData((prev) => {
-      if (prev.x.length > 200) {
+      if (prev.x.length > range) {
         prev.x.shift();
         prev.y.shift();
         prev.z.shift();
@@ -73,14 +79,35 @@ function App() {
   };
 
   useEffect(() => {
-    if (data.sum && data.sum.length > 1) {
-      let fftData = fft(data.sum, 1000.0 / data.interval);
+    let score = 0
+    if (data.sum && data.sum.length > range) {
+      let fftRawData = fft(data.sum, 1000.0 / data.interval);
+      for (const i in Array.from({ length: fftRawData.frequency.frequency.length }, (v, k) => k)) {
+        const frequency = fftRawData.frequency.frequency[i];
+        const amplitude = fftRawData.frequency.amplitude[i];
+
+        if (frequency == 0) {
+          score = 1 - (((10 - amplitude) ** 2) / 100);
+          if (score < 0) {
+            score = 0;
+          }
+        }
+      }
 
       setFttData({
-        frequency: fftData.frequency.frequency,
-        amplitude: fftData.frequency.amplitude,
+        frequency: fftRawData.frequency.frequency,
+        amplitude: fftRawData.frequency.amplitude,
       });
     }
+
+    setScoreData((prev) => {
+      if (prev.scores.length > range) {
+        prev.scores.shift();
+      }
+      return {  
+        scores: [...prev.scores, score],
+      };
+    });
   }, [data]);
 
   return (
@@ -95,6 +122,7 @@ function App() {
         <RawChart chartData={data} />
 
         <FttChart chartData={fttData} />
+        <ScoreChart chartData={scoreData} />
       </header>
     </div>
   );
